@@ -34,13 +34,13 @@ model_name = "D:/BaiduNetdiskDownload/2_LoRA课程资料/02_案例实战/Meta-Ll
 base_model = AutoModelForCausalLM.from_pretrained(
     model_name, low_cpu_mem_usage=True,
     return_dict=True,torch_dtype=torch.float16,
-    device_map= {"": 0})
+    device_map= "auto")
 
 
 # In[ ]:
 
 
-new_model = PeftModel.from_pretrained(base_model, "D:/BaiduNetdiskDownload/lora-k8s/checkpoint-57056")
+new_model = PeftModel.from_pretrained(base_model, "D:/BaiduNetdiskDownload/lora-k8s-new12312")
 #merged_model = base_model
 
 # In[ ]:
@@ -71,8 +71,10 @@ def tokenize(prompt, add_eos_token=True):
         truncation=True,
         max_length=cutoff_len,
         padding=False,
-        return_tensors=None,
+        return_tensors="pt",
     )
+    return result
+
     if (
         result["input_ids"][-1] != tokenizer.eos_token_id
         and len(result["input_ids"]) < cutoff_len
@@ -100,11 +102,12 @@ user_input = {"instruction": "Tell me something about the kubernetes.",
               "input": "",
               "output": ""}
 #"Tell me something about the kubernetes."
-device = "cuda:0"
+#device = "cuda"
 inputs = generate_and_tokenize_prompt(user_input)
 streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
-_ = merged_model.generate(**inputs, streamer=streamer, max_new_tokens=128, num_return_sequences=1)
+resp = merged_model.generate(**inputs, streamer=streamer, max_new_tokens=128, num_return_sequences=1)
 
+print(resp)
 
 # In[ ]:
 

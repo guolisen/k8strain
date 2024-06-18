@@ -8,6 +8,19 @@ import fire
 from typing import List
 from utils.prompter import Prompter
 
+CUDA_VISIBLE_DEVICES = "0"
+USE_TORCH = "1"
+CPU_NUMS = "1"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:3072"
+os.environ["CUDA_VISIBLE_DEVICES"] = CUDA_VISIBLE_DEVICES
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["USE_TORCH"] = USE_TORCH
+os.environ["VECLIB_MAXIMUM_THREADS"] = CPU_NUMS  # export VECLIB_MAXIMUM_THREADS=1
+os.environ["OPENBLAS_NUM_THREADS"] = CPU_NUMS  # export OPENBLAS_NUM_THREADS=1
+os.environ["NUMEXPR_NUM_THREADS"] = CPU_NUMS  # export NUMEXPR_NUM_THREADS=1
+os.environ["MKL_NUM_THREADS"] = CPU_NUMS  # export MKL_NUM_THREADS=1
+os.environ["OMP_NUM_THREADS"] = CPU_NUMS  # export OMP_NUM_THREADS=1
+
 # bitsandbytes：专为量化设计的库，重点在于减少大语言模型（尤其是在GPU上）的内存占用。
 # peft：用于将LoRA适配器集成到大语言模型（LLMs）中。
 # trl：该库包含一个SFT（监督微调）类，用于辅助微调模型。
@@ -25,8 +38,11 @@ from transformers import (
     pipeline,
     logging,
     TextStreamer,
-    Trainer
+    Trainer,
+    LlamaForCausalLM,
+    LlamaConfig
 )
+
 from trl import SFTTrainer
 import os, wandb
 from peft import (
@@ -47,7 +63,7 @@ def train(
     # training hyperparams
     batch_size: int = 2,
     micro_batch_size: int = 1,
-    num_epochs: int = 10,
+    num_epochs: int = 3,
     learning_rate: float = 1e-5,
     cutoff_len: int = 2048,
     val_set_size: int = 22800,
@@ -182,7 +198,8 @@ def train(
     model = AutoModelForCausalLM.from_pretrained(
         base_model,
         quantization_config = bnb_config,
-        device_map = device_map
+        device_map = device_map,
+        torch_dtype = torch.bfloat16
     )
     model = prepare_model_for_kbit_training(model) 
     #model = prepare_model_for_int8_training(model)
@@ -207,26 +224,6 @@ def train(
         data = load_dataset("json", data_files=data_path)
     else:
         data = load_dataset(data_path)
-
-    if resume_from_checkpoint:
-        # Check the available weights and load them
-        checkpoint_name = os.path.join(
-            resume_from_checkpoint, "pytorch_model.bin"
-        )  # Full checkpoint
-        if not os.path.exists(checkpoint_name):
-            checkpoint_name = os.path.join(
-                resume_from_checkpoint, "adapter_model.bin"
-            )  # only LoRA model - LoRA config above has to fit
-            resume_from_checkpoint = (
-                False  # So the trainer won't try loading its state
-            )
-        # The two files above have a different name depending on how they were saved, but are actually the same.
-        if os.path.exists(checkpoint_name):
-            print(f"Restarting from {checkpoint_name}")
-            adapters_weights = torch.load(checkpoint_name)
-            model = set_peft_model_state_dict(model, adapters_weights)
-        else:
-            print(f"Checkpoint {checkpoint_name} not found")
 
     model.print_trainable_parameters()  # Be more transparent about the % of trainable params.
 
@@ -254,7 +251,8 @@ def train(
         num_train_epochs = num_epochs,
         per_device_train_batch_size = 1,
         gradient_accumulation_steps = gradient_accumulation_steps, 
-        optim = "paged_adamw_8bit", # optim="adamw_torch",
+        #optim = "paged_adamw_8bit", # optim="adamw_torch",
+        optim="adamw_torch",
         logging_steps = 30,
         learning_rate = learning_rate,
         evaluation_strategy="steps" if val_set_size > 0 else "no",
@@ -262,7 +260,7 @@ def train(
         weight_decay = 0.001, # 权重衰减系数，用于L2正则化，帮助防止过拟合。
         fp16 = False,
         bf16 = False,
-        max_grad_norm = 0.3, # 最大梯度范数，用于梯度裁剪，防止梯度爆炸。
+        max_grad_norm = 1.0, # 最大梯度范数，用于梯度裁剪，防止梯度爆炸。
         max_steps = -1, # 最大训练步数为-1，表示没有限制。
         eval_steps=32 if val_set_size > 0 else None,
         save_steps=32, # 每100步保存一次模型

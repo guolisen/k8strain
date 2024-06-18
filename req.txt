@@ -1,0 +1,5 @@
+fire
+peft
+datasets
+trl
+transformers
