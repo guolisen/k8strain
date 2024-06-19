@@ -49,8 +49,8 @@ Below is an instruction that describes a task, paired with an input that provide
 
     return text_input_1
 
-prompt_dict = generate_prompt("Can you think of Azure Resource Manager as the equivalent to what kubernetes is for Docker?")
-    
+#prompt_dict = generate_prompt("Can you think of Azure Resource Manager as the equivalent to what kubernetes is for Docker?")
+prompt_dict = generate_prompt("If I start a Google Container Engine cluster like this:\ngcloud container clusters --zone=$ZONE create $CLUSTER_NAME\n\nI get three worker nodes.  How can I create a cluster with more?\n")   
 def infer_only_lora():
     """
     只使用LoRA部分推理
@@ -75,22 +75,28 @@ def infer_merge_llama_lora():
     # 基础模型路径
     base_model_path = "C:/code/llama/Meta-Llama-3-8B-Instruct"
     #base_model_path="D:/BaiduNetdiskDownload/2_LoRA课程资料/02_案例实战/Meta-Llama-3-8B-Instruct"
+
+    # 加载基础模型
+    base_model = LLMModel.from_pretrained(base_model_path, torch_dtype=torch.bfloat16)
     # 加载tokenizer
     tokenizer = LLMTokenizer.from_pretrained(base_model_path, add_eos_token=True, trust_remote_code=True)
     tokenizer.add_special_tokens({"pad_token": "[PAD]"})
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
-
-    # 加载基础模型
-    base_model = LLMModel.from_pretrained(base_model_path, torch_dtype=torch.bfloat16)
     # 微调模型路径
-    new_model = "C:/code/llama/lora-k8s-third"
+    new_model = "C:/code/llama/lora-k8s-forth"
+
     # 加载两者
     merge_model = PeftModel.from_pretrained(base_model, new_model)
     # 物理合并
     merge_model = merge_model.merge_and_unload()
     merge_model = merge_model.cuda()
  
+    # Save model and tokenizer
+    #output_model = "C:/code/llama/qu"
+    #merge_model.save_pretrained(output_model)
+    #tokenizer.save_pretrained(output_model)
+
     llama_pipeline = pipeline("text-generation", model=merge_model, tokenizer=tokenizer)
     sentences = llama_pipeline(prompt_dict,
                                eos_token_id=tokenizer.eos_token_id, max_new_tokens=256)

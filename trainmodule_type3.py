@@ -41,10 +41,12 @@ def peft_fine_tune():
     # 基础模型路径
     base_model_path = "/root/autodl-tmp/Meta-Llama-3-8B-Instruct"
     # 数据集路径
-    kb_dataset = "./datasets/datasets_llama3.json"
+    #kb_dataset = "./datasets/datasets_llama3.json"
+    kb_dataset = "sidddddddddddd/kubernetes-llama3"
     output_dir = "./lora-k8s-third/"
     # 采用json格式的数据集加载方式
-    dataset = load_dataset("json", data_files=kb_dataset, split="train")
+    #dataset = load_dataset("json", data_files=kb_dataset, split="train")
+    dataset = load_dataset(kb_dataset, split="train")
     #print(dataset)
     '''
     val_set_size = 0
